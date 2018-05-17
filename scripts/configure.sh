@@ -69,22 +69,31 @@ shift $((OPTIND-1))
 verbose=1
 echo "`date` INFO: solace_image=${solace_image}, cloud_provider=${cloud_provider}, values_file=${values_file} Leftovers: $@"
 
-helm_version=v2.7.2
 os_type=`uname`
 case ${os_type} in 
   "Darwin" )
     helm_type="darwin-amd64"
+    helm_version="v2.7.2"
+    archive_extension="tar.gz"
     sed_options="-E -i.bak"
     ;;
   "Linux" )
     helm_type="linux-amd64"
+    helm_version="v2.7.2"
+    archive_extension="tar.gz"
+    sed_options="-i.bak"
+    ;;
+  *_NT* ) # BASH emulation on windows
+    helm_type="windows-amd64"
+    helm_version=v2.9.1
+    archive_extension="zip"
     sed_options="-i.bak"
     ;;
 esac
 echo "`date` INFO: DOWNLOAD HELM"
 echo "#############################################################"
-wget https://storage.googleapis.com/kubernetes-helm/helm-${helm_version}-${helm_type}.tar.gz
-tar zxf helm-${helm_version}-${helm_type}.tar.gz
+curl -O https://storage.googleapis.com/kubernetes-helm/helm-${helm_version}-${helm_type}.${archive_extension}
+tar zxf helm-${helm_version}-${helm_type}.${archive_extension} || unzip helm-${helm_version}-${helm_type}.${archive_extension}
 mv ${helm_type} helm
 export HELM="`pwd`/helm/helm"
 
