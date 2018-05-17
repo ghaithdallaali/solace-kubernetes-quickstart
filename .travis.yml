@@ -2,6 +2,9 @@ language: ruby
 
 sudo: required
 
+env:
+- CHANGE_MINIKUBE_NONE_USER=true
+
 services:
   - docker
 
@@ -17,25 +20,25 @@ before_install:
   - echo $GCP_KEY_FILE | base64 -d > ./keyfile
   - gcloud auth activate-service-account -q $(jq -r .client_email keyfile) --key-file=./keyfile --project  $(jq -r .project_id keyfile)
   - rm ./keyfile
+  - curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && \
+      chmod +x minikube && sudo mv minikube /usr/local/bin/
   
 install: true
 
 script:
   - yaml-lint -n solace/values-examples/
   - yaml-lint -n solace/*.yaml
-  - echo "Testing GKE deployment, cloud provider Google Cloud Platform (gcp) "
-  - mkdir gke_test; cd gke_test
-  - export TESTCLUSTERNAME="sol-gke-travistest-$(date +%s)"
-  - wget https://raw.githubusercontent.com/SolaceProducts/solace-gke-quickstart/master/scripts/create_cluster.sh
-  - chmod 755 create_cluster.sh
-  - ./create_cluster.sh -z us-central1-b,us-central1-c,us-central1-f -c $TESTCLUSTERNAME -m n1-standard-2
+  - echo "Testing MiniKube deployment"
+  - mkdir minikube_test; cd minikube_test
+  - sudo minikube start --vm-driver=none
+  - minikube update-context
+  - JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'; \
+      until kubectl get nodes -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True"; do sleep 1; done
   - kubectl get statefulset,svc,pods,pvc,pv
   - export SOLACE_KUBERNETES_QUICKSTART_REPO="$TRAVIS_REPO_SLUG"; export SOLACE_KUBERNETES_QUICKSTART_BRANCH="$TRAVIS_BRANCH"
-  - passw="$(gcloud container clusters describe $TESTCLUSTERNAME --zone us-central1-b | grep password | awk '{print $2}')"
-  - export SOLACE_KUBERNETES_QUICKSTART_CLUSTERROLEBINDING_CREDENTIALS="--username=admin --password=$passw"
   - wget https://raw.githubusercontent.com/$SOLACE_KUBERNETES_QUICKSTART_REPO/$SOLACE_KUBERNETES_QUICKSTART_BRANCH/scripts/configure.sh
   - chmod 755 configure.sh
-  - ./configure.sh -c gcp -p admin -i gcr.io/capable-stream-180018/solace-pubsub-standard:8.10.0.1057 -v values-examples/prod1k-persist-ha-provisionPvc.yaml
+  - ./configure.sh -p admin -i gcr.io/capable-stream-180018/solace-pubsub-standard:8.10.0.1057
   - cd solace-kubernetes-quickstart/solace
   - ../../helm/helm install . -f values.yaml
   - kubectl get statefulset,svc,pods,pvc,pv --show-labels
